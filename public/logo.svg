@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" />
+      <stop offset="50%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="sproutGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#a7f3d0" />
+    </linearGradient>
+    <linearGradient id="furrowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#065f46" stop-opacity="0.2"/>
+      <stop offset="50%" stop-color="#34d399" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#065f46" stop-opacity="0.2"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded emblem -->
+  <rect width="64" height="64" rx="16" fill="url(#bgGrad)" />
+  <rect width="62" height="62" x="1" y="1" rx="15" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" />
+
+  <!-- Farm furrow/field ground line -->
+  <path d="M8 52 Q 32 46 56 52" stroke="url(#furrowGrad)" stroke-width="2.5" stroke-linecap="round" fill="none" />
+  <path d="M12 56 Q 32 51 52 56" stroke="url(#furrowGrad)" stroke-width="1.5" stroke-linecap="round" fill="none" />
+
+  <!-- Main 'K' Glyph stylized -->
+  <!-- Vertical stem of K with plant stem aesthetic -->
+  <path d="M18 16 C18 14.5 19.5 14 21 14 L24 14 C25.5 14 26.5 15 26.5 16.5 L26.5 47 C26.5 48.5 25.5 49.5 24 49.5 L21 49.5 C19.5 49.5 18 48.5 18 47 Z" fill="#ffffff" filter="url(#shadow)"/>
+
+  <!-- Upper arm of K that turns into a growing sprout -->
+  <path d="M26.5 32 L38.5 18.5 C39.5 17.5 41 17 42.5 17.5 L46 18.5 C47.5 19 48 20.8 47 22 L35 35.5 L48.5 47 C49.5 48 49 49.5 47.5 49.5 L43 49.5 C41.5 49.5 40 48.8 39 47.8 L26.5 36.5 Z" fill="#ffffff" filter="url(#shadow)"/>
+
+  <!-- Sprouting farm leaf growing off the top arm of K -->
+  <path d="M41 16 C41 16 48 11 53 13 C55 18 50 25 44 24 C43 21 41.5 18 41 16 Z" fill="url(#sproutGrad)" />
+  <path d="M41 16 Q 48 18 53 13" stroke="#047857" stroke-width="1" stroke-linecap="round" fill="none"/>
+  
+  <!-- Little seed / secondary leaf -->
+  <path d="M37 20 C37 20 40 16 44 18 C44 21 40 23 37 20 Z" fill="#6ee7b7" opacity="0.9"/>
+</svg>

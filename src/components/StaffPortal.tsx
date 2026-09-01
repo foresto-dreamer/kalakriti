@@ -1033,6 +1033,12 @@ export default function StaffPortal({ isOpen = false, onClose = () => {}, role, 
                       Sign In with Google
                     </button>
 
+                    {/* Security Warning Notice */}
+                    <p className="text-[11px] text-slate-500 mt-2.5 text-center font-bold tracking-wide flex items-center justify-center gap-1.5 bg-slate-50 py-1.5 px-3 rounded-xl border border-slate-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                      Only Authenticated Users Will Be Able To Login
+                    </p>
+
                     <div className="text-center pt-2">
                       <button
                         onClick={() => {
@@ -1477,6 +1483,12 @@ export default function StaffPortal({ isOpen = false, onClose = () => {}, role, 
                 </svg>
                 Sign In with Google
               </button>
+
+              {/* Security Warning Notice */}
+              <p className="text-[11px] text-slate-500 mt-2.5 text-center font-bold tracking-wide flex items-center justify-center gap-1.5 bg-slate-50 py-1.5 px-3 rounded-xl border border-slate-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                Only Authenticated Users Will Be Able To Login
+              </p>
 
               <div className="text-center pt-2">
                 <button

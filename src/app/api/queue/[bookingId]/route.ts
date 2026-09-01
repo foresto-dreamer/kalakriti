@@ -82,7 +82,7 @@ export async function GET(
     // A booking currently being processed should not count
     // as a full person ahead in the same way as waiting bookings.
     const currentlyProcessing = bookingsAhead?.some(
-      (item) => item.status === "processing"
+      (item: any) => item.status === "processing"
     );
 
     const effectivePeopleAhead = currentlyProcessing

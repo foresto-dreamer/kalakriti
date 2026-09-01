@@ -1,15 +1,10 @@
-"use client";
+import OperatorConsole from "@/components/OperatorConsole";
 
-import React from "react";
-import StaffPortal from "@/components/StaffPortal";
+export const metadata = {
+  title: "Operator Console | KisanSetu APMC Procurement Desk",
+  description: "Official APMC Yard Operator Console for live token queue, digital weighbridge integration, and DBT token issuance.",
+};
 
 export default function OperatorPage() {
-  return (
-    <StaffPortal
-      isOpen={true}
-      onClose={() => {}}
-      role="operator"
-      isFullScreen={true}
-    />
-  );
+  return <OperatorConsole />;
 }

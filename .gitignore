@@ -16,7 +16,7 @@
 # next.js
 /.next/
 /out/
-
+.env
 # production
 /build
 
@@ -40,3 +40,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 AGENTS.md
+src/lib/supabase/mock-db.json

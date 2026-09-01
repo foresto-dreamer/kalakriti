@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "@/hooks/useTranslation";
 
 interface LoginPortalProps {
@@ -8,404 +9,485 @@ interface LoginPortalProps {
   onClose: () => void;
 }
 
+interface FarmerProfileData {
+  name: string;
+  phone: string;
+  state: string;
+  district: string;
+  location: string;
+  area: number;
+  primaryCrop: string;
+  bankAccount: string;
+  dbtStatus: string;
+  farmerId: string;
+  joinedDate: string;
+}
+
+const INDIAN_STATES = [
+  "Uttar Pradesh",
+  "Punjab",
+  "Haryana",
+  "Madhya Pradesh",
+  "West Bengal",
+  "Odisha",
+  "Bihar",
+  "Rajasthan",
+  "Maharashtra",
+  "Gujarat",
+  "Andhra Pradesh",
+  "Karnataka",
+];
+
+const CROPS_LIST = ["Paddy (धान)", "Wheat (गेहूं)", "Mustard (सरसों)", "Maize (मक्का)", "Barley (जौ)"];
+
 export default function LoginPortal({ isOpen, onClose }: LoginPortalProps) {
-  const [step, setStep] = useState<"phone" | "otp" | "profile" | "dashboard">("phone");
+  const router = useRouter();
+  const { t, lang } = useTranslation();
+
+  const [step, setStep] = useState<"phone" | "otp" | "profile">("phone");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [otp, setOtp] = useState("");
-  const [farmerProfile, setFarmerProfile] = useState<{ name: string; location: string; area: number } | null>(null);
-  const [profileForm, setProfileForm] = useState({ name: "", location: "", area: "" });
+  const [otp, setOtp] = useState("4241");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const { t } = useTranslation();
+
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    state: "Uttar Pradesh",
+    district: "Kanpur Nagar",
+    location: "",
+    area: "5",
+    primaryCrop: "Paddy (धान)",
+    bankAccount: "SBI ****4920",
+  });
 
   useEffect(() => {
+    // Check if farmer is already logged in
     const cachedProfile = localStorage.getItem("kisanSetu_farmer_profile");
     if (cachedProfile) {
       try {
-        setFarmerProfile(JSON.parse(cachedProfile));
-        setStep("dashboard");
-      } catch {
-        localStorage.removeItem("kisanSetu_farmer_profile");
-      }
+        const parsed = JSON.parse(cachedProfile);
+        if (parsed?.name) {
+          setProfileForm((prev) => ({
+            ...prev,
+            name: parsed.name || "",
+            state: parsed.state || "Uttar Pradesh",
+            district: parsed.district || "Kanpur Nagar",
+            location: parsed.location || "",
+            area: parsed.area?.toString() || "5",
+            primaryCrop: parsed.primaryCrop || "Paddy (धान)",
+            bankAccount: parsed.bankAccount || "SBI ****4920",
+          }));
+        }
+      } catch {}
     }
   }, []);
 
-  if (!isOpen) return null;
+  const sendOtpForPhone = (num: string) => {
+    if (num.length !== 10) return;
+    setIsSubmitting(true);
+    setErrorMessage("");
+    // Instant dummy OTP generator (4241)
+    setTimeout(() => {
+      setPhoneNumber(num);
+      setOtp("4241");
+      setIsSubmitting(false);
+      setStep("otp");
+    }, 300);
+  };
 
-  const handleSendOtp = async (e: React.FormEvent) => {
+  useEffect(() => {
+    const handleLoginEvent = (e: any) => {
+      const { phone, autoSendOtp } = e.detail || {};
+      if (phone) {
+        const clean = phone.replace(/\D/g, "").slice(-10);
+        setPhoneNumber(clean);
+        if (autoSendOtp && clean.length === 10) {
+          sendOtpForPhone(clean);
+        }
+      }
+    };
+    window.addEventListener("kisansetu_open_login", handleLoginEvent);
+    return () => window.removeEventListener("kisansetu_open_login", handleLoginEvent);
+  }, []);
+
+  // Geolocation auto-detection
+  const detectLocation = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      setErrorMessage("Geolocation is not supported by your browser.");
+      return;
+    }
+    setIsDetectingLocation(true);
+    setErrorMessage("");
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+          );
+          const data = await res.json();
+          if (data) {
+            const villageOrLocality = data.locality || data.city || data.principalSubdivisionDistrict || "Local Village";
+            const district = data.principalSubdivisionDistrict || data.city || "District Area";
+            const state = data.principalSubdivision || "Uttar Pradesh";
+
+            setProfileForm((prev) => ({
+              ...prev,
+              location: villageOrLocality,
+              district: district,
+              state: INDIAN_STATES.includes(state) ? state : prev.state,
+            }));
+          }
+        } catch (err) {
+          console.error("Geocoding failed:", err);
+          setErrorMessage("Could not resolve location name automatically. Please type it in.");
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      (err) => {
+        console.warn("Location permission denied:", err);
+        setIsDetectingLocation(false);
+      },
+      { timeout: 10000 }
+    );
+  };
+
+  const handleSendOtp = (e: React.FormEvent) => {
     e.preventDefault();
     if (phoneNumber.length !== 10) {
       setErrorMessage("Please enter a valid 10-digit mobile number.");
       return;
     }
-    setIsSubmitting(true);
-    setErrorMessage("");
-    try {
-      const response = await fetch("/api/auth/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: `+91${phoneNumber}` }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not send OTP.");
-      setIsSubmitting(false);
-      setStep("otp");
-    } catch (error) {
-      setIsSubmitting(false);
-      setErrorMessage(error instanceof Error ? error.message : "Could not send OTP.");
-    }
+    sendOtpForPhone(phoneNumber);
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
+  const handleVerifyOtp = (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.length !== 6) {
-      setErrorMessage("Please enter the 6-digit code sent by SMS.");
+    // Validate Dummy OTP (4241)
+    if (otp.trim() !== "4241") {
+      setErrorMessage("Invalid OTP. Please enter dummy code 4241.");
       return;
     }
+
     setIsSubmitting(true);
     setErrorMessage("");
-    try {
-      const response = await fetch("/api/auth/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: `+91${phoneNumber}`, otp }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not verify OTP.");
-      const profileResponse = await fetch("/api/farmers/profile");
-      const profileResult = await profileResponse.json();
-      if (!profileResponse.ok) throw new Error(profileResult.error || "Could not load farmer profile.");
+
+    setTimeout(() => {
       setIsSubmitting(false);
-      if (profileResult.profile) {
-        setFarmerProfile(profileResult.profile);
-        localStorage.setItem("kisanSetu_farmer_profile", JSON.stringify(profileResult.profile));
-        setStep("dashboard");
-      } else {
-        setStep("profile");
+      const existing = localStorage.getItem("kisanSetu_farmer_profile");
+      if (existing) {
+        try {
+          const parsed = JSON.parse(existing);
+          if (parsed?.name) {
+            onClose();
+            router.push("/profile");
+            return;
+          }
+        } catch {}
       }
-    } catch (error) {
-      setIsSubmitting(false);
-      setErrorMessage(error instanceof Error ? error.message : "Could not verify OTP.");
-    }
+      // Trigger automatic GPS location check on profile step
+      setStep("profile");
+      detectLocation();
+    }, 250);
   };
 
-  const handleSaveProfile = async (e: React.FormEvent) => {
+  const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    const area = Number(profileForm.area);
-    if (!profileForm.name.trim() || !profileForm.location.trim() || !Number.isFinite(area) || area <= 0) {
-      setErrorMessage("Enter your name, location, and a valid area.");
+    if (!profileForm.name.trim()) {
+      setErrorMessage("Please enter your Full Name.");
       return;
     }
+    if (!profileForm.location.trim()) {
+      setErrorMessage("Please enter your Village / Tehsil location.");
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage("");
-    try {
-      const response = await fetch("/api/farmers/profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: profileForm.name.trim(), location: profileForm.location.trim(), area }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not save profile.");
-      setFarmerProfile(result.profile);
-      localStorage.setItem("kisanSetu_farmer_profile", JSON.stringify(result.profile));
-      setIsSubmitting(false);
-      setStep("dashboard");
-    } catch (error) {
-      setIsSubmitting(false);
-      setErrorMessage(error instanceof Error ? error.message : "Could not save profile.");
-    }
-  };
 
-  const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    localStorage.removeItem("kisanSetu_farmer_profile");
-    setFarmerProfile(null);
-    setStep("phone");
-    setPhoneNumber("");
-    setOtp("");
+    const newProfile: FarmerProfileData = {
+      name: profileForm.name.trim(),
+      phone: `+91 ${phoneNumber || "9876543210"}`,
+      state: profileForm.state || "Uttar Pradesh",
+      district: profileForm.district.trim() || "Kanpur Nagar",
+      location: profileForm.location.trim(),
+      area: Number(profileForm.area) || 5,
+      primaryCrop: profileForm.primaryCrop || "Paddy (धान)",
+      bankAccount: profileForm.bankAccount || "SBI ****4920",
+      dbtStatus: "Active & Verified",
+      farmerId: `KS-FARM-${Math.floor(1000 + Math.random() * 9000)}`,
+      joinedDate: new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
+    };
+
+    localStorage.setItem("kisanSetu_farmer_profile", JSON.stringify(newProfile));
+    window.dispatchEvent(new Event("kisanSetu_profile_updated"));
+    window.dispatchEvent(new Event("storage"));
+
+    setIsSubmitting(false);
     onClose();
+    router.push("/profile");
   };
 
-  const MOCK_FARMER = {
-    name: farmerProfile?.name || "Farmer",
-    location: farmerProfile?.location || "",
-    area: farmerProfile?.area || 0,
-    state: "Uttar Pradesh",
-    district: "Kalyanpur",
-    bankAccount: "SBI ****4920",
-    activeBookings: [
-      { id: "KS-593021", crop: "Paddy", weight: 35, center: "GreenValley Agriculture Hub", date: "2026-08-26", slot: "08:00 AM - 10:00 AM", status: "Verified" }
-    ],
-    salesHistory: [
-      { id: "INV-9402", crop: "Wheat", weight: 45, rate: "₹2,275/Qtl", amount: "₹1,02,375", date: "2026-06-12", payment: "DBT Transferred" },
-      { id: "INV-8912", crop: "Mustard", weight: 15, rate: "₹5,450/Qtl", amount: "₹81,750", date: "2026-04-18", payment: "DBT Transferred" }
-    ]
-  };
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-900/60 backdrop-blur-md px-4 py-8">
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-slate-950/80 backdrop-blur-md px-4 py-6 animate-fade-in-up font-sans">
       {/* Modal Card */}
-      <div className="bg-white rounded-3xl w-full max-w-2xl border border-slate-100 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-fade-in-up">
-        {/* Modal Header */}
-        <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <span className="text-xl font-bold tracking-tight">
-              <span className="text-emerald-400">Kisan</span>Setu
-            </span>
-            <span className="text-slate-400 text-xs px-2 py-0.5 rounded-full border border-slate-800 bg-slate-850">
-              {step === "dashboard" ? "Farmer Dashboard" : t("nav_login_portal")}
-            </span>
-          </div>
+      <div className="relative w-full max-w-lg bg-slate-900 border border-emerald-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-emerald-500/10 text-white overflow-hidden max-h-[90vh] overflow-y-auto scrollbar-thin">
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 rounded-full hover:bg-slate-800 transition-colors cursor-pointer"
+          aria-label="Close modal"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
 
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-              className="w-5 h-5"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Modal Scrollable Content */}
-        <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-slate-50/50">
-          {errorMessage && (
-            <p role="alert" className="max-w-md mx-auto mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-              {errorMessage}
-            </p>
-          )}
-          {step === "phone" && (
-            <div className="max-w-md mx-auto py-8 space-y-6">
-              <div className="text-center space-y-2">
-                <span className="text-4xl">🌾</span>
-                <h3 className="text-2xl font-black text-slate-900">{t("login_title")}</h3>
-                <p className="text-sm text-slate-500">
-                  {t("login_desc")}
-                </p>
+        {/* Step 1: Phone Number */}
+        {step === "phone" && (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+                </svg>
               </div>
-
-              <form onSubmit={handleSendOtp} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-                    {t("login_phone")}
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-4 flex items-center font-bold text-slate-400 text-sm">
-                      +91
-                    </span>
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      placeholder="98765 43210"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
-                      className="w-full pl-14 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 text-sm font-bold shadow-inner"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm py-4 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center"
-                >
-                  {isSubmitting ? t("login_sending") : t("login_btn_otp")}
-                </button>
-              </form>
+              <h2 className="text-2xl font-black text-white tracking-tight">Farmer Login Portal</h2>
+              <p className="text-sm text-slate-400">Enter your 10-digit mobile number to access your account.</p>
             </div>
-          )}
 
-          {step === "otp" && (
-            <div className="max-w-md mx-auto py-8 space-y-6">
-              <div className="text-center space-y-2">
-                <span className="text-4xl">🔐</span>
-                <h3 className="text-2xl font-black text-slate-900">{t("login_otp_title")}</h3>
-                <p className="text-sm text-slate-500">
-                  {t("login_otp_desc")}
-                </p>
-              </div>
-
-              <form onSubmit={handleVerifyOtp} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-                    {t("login_otp_label")}
-                  </label>
+            <form onSubmit={handleSendOtp} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Mobile Number</label>
+                <div className="flex rounded-2xl bg-slate-950 border border-slate-700 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 overflow-hidden transition-all">
+                  <span className="px-4 py-3 bg-slate-800 text-slate-300 font-bold text-sm flex items-center border-r border-slate-700">+91</span>
                   <input
-                    type="text"
-                    required
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    placeholder="• • • • • •"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                    className="w-full tracking-[1.5em] text-center py-4 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 font-black text-lg shadow-inner"
+                    type="tel"
+                    maxLength={10}
+                    placeholder="9876543210"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
+                    className="w-full bg-transparent px-4 py-3 text-white placeholder-slate-500 font-mono text-base focus:outline-none"
+                    autoFocus
                   />
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm py-4 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center"
-                >
-                  {isSubmitting ? t("login_otp_verifying") : t("login_otp_verify")}
-                </button>
-              </form>
-
-              <div className="text-center pt-2">
-                <button
-                  onClick={() => setStep("phone")}
-                  className="text-xs font-bold text-slate-500 hover:text-emerald-600"
-                >
-                  ← {t("login_otp_change")}
-                </button>
               </div>
+
+              {errorMessage && <p className="text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20">{errorMessage}</p>}
+
+              <button
+                type="submit"
+                disabled={phoneNumber.length !== 10 || isSubmitting}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-black py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              >
+                {isSubmitting ? "Sending OTP..." : "Get OTP Code"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Step 2: OTP Verification (Dummy: 4241) */}
+        {step === "otp" && (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Verify Mobile Number</h2>
+              <p className="text-sm text-slate-400">
+                Code sent to <span className="font-bold text-white font-mono">+91 {phoneNumber}</span>
+              </p>
             </div>
-          )}
 
-          {step === "profile" && (
-            <div className="max-w-md mx-auto py-8 space-y-6">
-              <div className="text-center space-y-2">
-                <span className="text-4xl">👨‍🌾</span>
-                <h3 className="text-2xl font-black text-slate-900">Complete your farmer profile</h3>
-                <p className="text-sm text-slate-500">Tell us a little about your farm to finish setting up your account.</p>
+            {/* Dummy OTP Hint Banner */}
+            <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-2xl flex items-center justify-between text-xs">
+              <span className="text-emerald-300 font-semibold">Fixed Demo OTP Code:</span>
+              <span className="font-mono font-black text-emerald-400 text-base tracking-widest bg-emerald-950/80 px-2.5 py-0.5 rounded-lg border border-emerald-500/30">
+                4241
+              </span>
+            </div>
+
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Enter 4-Digit OTP Code</label>
+                <input
+                  type="text"
+                  maxLength={4}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 text-center tracking-[0.5em] text-2xl font-black text-emerald-400 rounded-2xl py-3.5 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-mono shadow-inner"
+                  autoFocus
+                />
               </div>
 
-              <form onSubmit={handleSaveProfile} className="space-y-4">
+              {errorMessage && <p className="text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20">{errorMessage}</p>}
+
+              <button
+                type="submit"
+                disabled={otp.length !== 4 || isSubmitting}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-black py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              >
+                {isSubmitting ? "Verifying..." : "Verify & Proceed"}
+              </button>
+
+              <div className="flex justify-between items-center text-xs text-slate-400 pt-2">
+                <button type="button" onClick={() => setStep("phone")} className="hover:text-emerald-400 underline cursor-pointer">
+                  Change Number
+                </button>
+                <button type="button" onClick={() => setOtp("4241")} className="text-emerald-400 hover:underline font-bold cursor-pointer">
+                  Auto-Fill 4241
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Step 3: Farmer Basic Details Setup with Geolocation */}
+        {step === "profile" && (
+          <div className="space-y-5">
+            <div className="text-center space-y-1">
+              <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-1">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Farmer Basic Profile</h2>
+              <p className="text-xs text-slate-400">Complete your profile to unlock auto-slot booking and token access.</p>
+            </div>
+
+            {/* Auto GPS Detect Button */}
+            <div className="flex items-center justify-between bg-slate-950 p-3 rounded-2xl border border-slate-800">
+              <div className="flex items-center space-x-2 text-xs text-slate-300">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-emerald-400">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+                </svg>
+                <span>Device GPS Location</span>
+              </div>
+              <button
+                type="button"
+                onClick={detectLocation}
+                disabled={isDetectingLocation}
+                className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                {isDetectingLocation ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span>
+                    Detecting...
+                  </>
+                ) : (
+                  "Auto-Detect Location"
+                )}
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="space-y-3.5">
+              {/* Full Name */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Full Name *</label>
                 <input
-                  required
-                  placeholder="Full name"
+                  type="text"
+                  placeholder="e.g. Rameshwar Singh"
                   value={profileForm.name}
                   onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                  className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 text-sm font-semibold shadow-inner"
-                />
-                <input
+                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3.5 py-2.5 text-sm font-medium focus:border-emerald-500 focus:outline-none"
                   required
-                  placeholder="Village, district, state"
-                  value={profileForm.location}
-                  onChange={(e) => setProfileForm({ ...profileForm, location: e.target.value })}
-                  className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 text-sm font-semibold shadow-inner"
                 />
-                <div className="flex gap-3">
+              </div>
+
+              {/* State & District */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">State</label>
+                  <select
+                    value={profileForm.state}
+                    onChange={(e) => setProfileForm({ ...profileForm, state: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2.5 text-xs font-semibold focus:border-emerald-500 focus:outline-none cursor-pointer"
+                  >
+                    {INDIAN_STATES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">District</label>
                   <input
+                    type="text"
+                    placeholder="e.g. Kanpur Nagar"
+                    value={profileForm.district}
+                    onChange={(e) => setProfileForm({ ...profileForm, district: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3.5 py-2.5 text-sm font-medium focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Village & Land Area */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Village / Tehsil Location *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Kalyanpur"
+                    value={profileForm.location}
+                    onChange={(e) => setProfileForm({ ...profileForm, location: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3.5 py-2.5 text-sm font-medium focus:border-emerald-500 focus:outline-none"
                     required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Land Area (Acres)</label>
+                  <input
                     type="number"
-                    min="0.01"
-                    step="0.01"
-                    placeholder="Farm area"
+                    step="0.5"
+                    min="0.5"
+                    max="100"
+                    placeholder="5.0"
                     value={profileForm.area}
                     onChange={(e) => setProfileForm({ ...profileForm, area: e.target.value })}
-                    className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 text-sm font-semibold shadow-inner"
+                    className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3.5 py-2.5 text-sm font-medium focus:border-emerald-500 focus:outline-none"
                   />
-                  <span className="flex items-center px-4 rounded-xl border border-slate-200 bg-slate-100 text-sm font-bold text-slate-500">acres</span>
                 </div>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm py-4 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center"
-                >
-                  {isSubmitting ? "Saving profile..." : "Save farmer profile"}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {step === "dashboard" && (
-            <div className="space-y-8 py-2">
-              {/* Profile Card */}
-              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <h4 className="text-xl font-bold text-slate-800">{MOCK_FARMER.name}</h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    📍 {MOCK_FARMER.location} | Farm area: {MOCK_FARMER.area} acres
-                  </p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="text-xs font-bold bg-white hover:bg-red-50 text-red-600 hover:text-red-700 px-4 py-2 rounded-full border border-slate-200 transition-all cursor-pointer"
-                >
-                  Logout Portal
-                </button>
               </div>
 
-              {/* Active Bookings Section */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">{t("dash_active")}</h4>
-                {MOCK_FARMER.activeBookings.map((b, idx) => (
-                  <div key={idx} className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-bold">TOKEN NUMBER</span>
-                        <span className="text-lg font-black text-emerald-600 font-mono tracking-wide">{b.id}</span>
-                      </div>
-                      <span className="px-3 py-1 bg-emerald-50 border border-emerald-100 text-emerald-700 font-bold text-xs rounded-full">
-                        {b.status}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 text-xs font-semibold">
-                      <div>
-                        <span className="text-slate-400 block">Center Hub</span>
-                        <span className="text-slate-800 mt-0.5 block leading-tight">{b.center}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block">Crop Type</span>
-                        <span className="text-slate-800 mt-0.5 block">🌾 {b.crop}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block">Date</span>
-                        <span className="text-slate-800 mt-0.5 block">📅 {b.date}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block">Arrival Hours</span>
-                        <span className="text-slate-800 mt-0.5 block">⏰ {b.slot}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* DBT Completed Payouts Transactions */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">{t("dash_mandi")}</h4>
-                <div className="space-y-3">
-                  {MOCK_FARMER.salesHistory.map((s, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-white border border-slate-150 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:border-slate-300 transition-colors"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <span className="text-2xl bg-slate-50 p-2.5 rounded-xl border border-slate-100">💰</span>
-                        <div>
-                          <p className="font-bold text-slate-800">🌾 {s.crop} Sale ({s.weight} Quintals)</p>
-                          <p className="text-xs text-slate-400">
-                            Inv ID: {s.id} | Rate: {s.rate} | Date: {s.date}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-start sm:items-end w-full sm:w-auto">
-                        <span className="text-base font-black text-slate-800">{s.amount}</span>
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded mt-1 flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                          {s.payment} ({t("dash_dbt")})
-                        </span>
-                      </div>
-                    </div>
+              {/* Primary Crop */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Primary Crop</label>
+                <select
+                  value={profileForm.primaryCrop}
+                  onChange={(e) => setProfileForm({ ...profileForm, primaryCrop: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 text-white rounded-xl px-3 py-2.5 text-xs font-semibold focus:border-emerald-500 focus:outline-none cursor-pointer"
+                >
+                  {CROPS_LIST.map((crop) => (
+                    <option key={crop} value={crop}>
+                      {crop}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
-            </div>
-          )}
-        </div>
+
+              {errorMessage && <p className="text-xs font-bold text-red-400 bg-red-500/10 p-2.5 rounded-xl border border-red-500/20">{errorMessage}</p>}
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98] mt-2"
+              >
+                {isSubmitting ? "Saving Profile..." : "Save Details & Open Profile Page"}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );

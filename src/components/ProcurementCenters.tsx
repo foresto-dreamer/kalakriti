@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "@/hooks/useTranslation";
 
 export interface Center {
@@ -62,6 +62,160 @@ export const MOCK_CENTERS: Center[] = [
   },
 ];
 
+const REGIONAL_CENTERS_DB: Record<string, Center[]> = {
+  Odisha: [
+    {
+      id: "od-1",
+      name: "Chandaka RMC Procurement Yard",
+      location: "Chandaka Main Market Link Rd, Block 2, Khordha",
+      distance: "1.8 km",
+      crops: ["Paddy", "Mustard", "Maize"],
+      capacity: 38,
+      waitTime: "15 mins wait",
+      status: "available",
+      phone: "+91 94370 12345",
+    },
+    {
+      id: "od-2",
+      name: "Bhubaneswar Central APMC Mandi",
+      location: "Rasulgarh - Cuttack Highway Bypass, Bhubaneswar",
+      distance: "5.4 km",
+      crops: ["Paddy", "Wheat", "Maize"],
+      capacity: 65,
+      waitTime: "35 mins wait",
+      status: "available",
+      phone: "+91 94370 54321",
+    },
+    {
+      id: "od-3",
+      name: "Khordha Regional Krishi Sangrah Kendra",
+      location: "Old NH-16 Agro Hub, Khordha Town",
+      distance: "12.6 km",
+      crops: ["Paddy", "Mustard", "Barley"],
+      capacity: 88,
+      waitTime: "60 mins wait",
+      status: "busy",
+      phone: "+91 94370 98765",
+    },
+    {
+      id: "od-4",
+      name: "Jatni Kisan Sahakari Depot",
+      location: "Near Jatni Railway Goods Shed, Khordha",
+      distance: "16.2 km",
+      crops: ["Paddy", "Maize"],
+      capacity: 22,
+      waitTime: "10 mins wait",
+      status: "available",
+      phone: "+91 94370 67890",
+    },
+  ],
+  "Uttar Pradesh": [
+    {
+      id: "up-1",
+      name: "GreenValley Agriculture Hub",
+      location: "Kalyanpur Market Link Rd, Block A, Kanpur",
+      distance: "1.2 km",
+      crops: ["Paddy", "Wheat", "Maize"],
+      capacity: 42,
+      waitTime: "15 mins wait",
+      status: "available",
+      phone: "+91 98765 43210",
+    },
+    {
+      id: "up-2",
+      name: "Kalyanpur Krishi Mandi",
+      location: "Mandi Bypass Chowk, Sector 4, Kanpur",
+      distance: "3.8 km",
+      crops: ["Paddy", "Maize", "Mustard"],
+      capacity: 78,
+      waitTime: "45 mins wait",
+      status: "busy",
+      phone: "+91 98765 43211",
+    },
+    {
+      id: "up-3",
+      name: "Jai Kisan Sangrah Kendra",
+      location: "National Highway 2, Near Toll Plaza, Kanpur",
+      distance: "5.5 km",
+      crops: ["Wheat", "Mustard", "Barley"],
+      capacity: 94,
+      waitTime: "90 mins wait",
+      status: "full",
+      phone: "+91 98765 43212",
+    },
+    {
+      id: "up-4",
+      name: "Setu Sahakari Samiti Kendra",
+      location: "Rampur Village Panchayat Office, Kanpur Dehat",
+      distance: "7.1 km",
+      crops: ["Paddy", "Wheat", "Barley"],
+      capacity: 18,
+      waitTime: "5 mins wait",
+      status: "available",
+      phone: "+91 98765 43213",
+    },
+  ],
+  Punjab: [
+    {
+      id: "pb-1",
+      name: "Khanna Grain Market Main Yard",
+      location: "Grand Trunk Rd, Khanna, Ludhiana",
+      distance: "2.1 km",
+      crops: ["Wheat", "Paddy", "Mustard"],
+      capacity: 45,
+      waitTime: "20 mins wait",
+      status: "available",
+      phone: "+91 98140 12345",
+    },
+    {
+      id: "pb-2",
+      name: "Ludhiana Central APMC Grain Terminal",
+      location: "Gill Road Mandi Complex, Ludhiana",
+      distance: "6.5 km",
+      crops: ["Wheat", "Paddy", "Maize"],
+      capacity: 82,
+      waitTime: "50 mins wait",
+      status: "busy",
+      phone: "+91 98140 54321",
+    },
+    {
+      id: "pb-3",
+      name: "Samrala Kisan Procurement Center",
+      location: "Samrala Bypass, Ludhiana District",
+      distance: "11.8 km",
+      crops: ["Wheat", "Barley", "Mustard"],
+      capacity: 30,
+      waitTime: "15 mins wait",
+      status: "available",
+      phone: "+91 98140 98765",
+    },
+  ],
+  "West Bengal": [
+    {
+      id: "wb-1",
+      name: "Singur RMC Krishi Mandi",
+      location: "Singur Station Road, Hooghly",
+      distance: "2.3 km",
+      crops: ["Paddy", "Mustard", "Maize"],
+      capacity: 40,
+      waitTime: "15 mins wait",
+      status: "available",
+      phone: "+91 98300 12345",
+    },
+    {
+      id: "wb-2",
+      name: "Hooghly District Central Procurement Depot",
+      location: "Chinsurah Bypass Link Road, Hooghly",
+      distance: "7.8 km",
+      crops: ["Paddy", "Mustard", "Wheat"],
+      capacity: 70,
+      waitTime: "40 mins wait",
+      status: "busy",
+      phone: "+91 98300 54321",
+    },
+  ],
+};
+
 interface ProcurementCentersProps {
   onSelectCenter: (centerName: string) => void;
 }
@@ -69,9 +223,149 @@ interface ProcurementCentersProps {
 export default function ProcurementCenters({ onSelectCenter }: ProcurementCentersProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCrop, setSelectedCrop] = useState("All");
+  const [displayLocation, setDisplayLocation] = useState("Bhubaneswar, Odisha");
+  const [centers, setCenters] = useState<Center[]>(REGIONAL_CENTERS_DB.Odisha);
+  const [isLocating, setIsLocating] = useState(false);
   const { t, lang } = useTranslation();
 
-  const filteredCenters = MOCK_CENTERS.filter((center) => {
+  const resolveCentersForLocation = (state: string, city: string, area?: string) => {
+    setDisplayLocation(`${city}, ${state}`);
+    if (REGIONAL_CENTERS_DB[state]) {
+      setCenters(REGIONAL_CENTERS_DB[state]);
+    } else {
+      // Create dynamically tailored centers for the detected area
+      const dynamicList: Center[] = [
+        {
+          id: `dyn-1`,
+          name: `${area || city} Primary APMC Yard`,
+          location: `${area || city} Main Mandi Link Road, ${state}`,
+          distance: "2.1 km",
+          crops: ["Paddy", "Wheat", "Maize", "Mustard"],
+          capacity: 45,
+          waitTime: "15 mins wait",
+          status: "available",
+          phone: "+91 98765 00001",
+        },
+        {
+          id: `dyn-2`,
+          name: `${city} Central Grain Procurement Hub`,
+          location: `${city} Highway Bypass Depot, ${state}`,
+          distance: "5.8 km",
+          crops: ["Paddy", "Wheat", "Barley"],
+          capacity: 72,
+          waitTime: "40 mins wait",
+          status: "busy",
+          phone: "+91 98765 00002",
+        },
+        {
+          id: `dyn-3`,
+          name: `${city} Kisan Sahakari Samiti`,
+          location: `Station Link Road, ${city}`,
+          distance: "9.4 km",
+          crops: ["Wheat", "Mustard", "Maize"],
+          capacity: 25,
+          waitTime: "10 mins wait",
+          status: "available",
+          phone: "+91 98765 00003",
+        },
+      ];
+      setCenters(dynamicList);
+    }
+  };
+
+  const detectDeviceLocation = () => {
+    if (typeof window === "undefined" || !navigator.geolocation) return;
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+          );
+          const geoJson = await res.json();
+          if (geoJson) {
+            const adminList = geoJson.localityInfo?.administrative || [];
+            const state = geoJson.principalSubdivision || "Odisha";
+            const subdistrict =
+              adminList.find((a: any) => a.order >= 4 || a.adminLevel >= 6)?.name ||
+              geoJson.localityInfo?.informative?.[0]?.name;
+            const mainCity = geoJson.city || geoJson.locality || "Bhubaneswar";
+            const district = geoJson.principalSubdivisionDistrict || adminList.find((a: any) => a.order === 3)?.name || mainCity;
+
+            let area = subdistrict && subdistrict.toLowerCase() !== mainCity.toLowerCase() ? subdistrict : district;
+            let city = mainCity;
+
+            const POPULAR_METROS = [
+              "Bhubaneswar",
+              "Cuttack",
+              "Kolkata",
+              "Delhi",
+              "New Delhi",
+              "Mumbai",
+              "Pune",
+              "Lucknow",
+              "Kanpur",
+              "Patna",
+              "Ludhiana",
+              "Amritsar",
+              "Jaipur",
+              "Ahmedabad",
+              "Chandigarh",
+              "Bengaluru",
+              "Hyderabad",
+              "Chennai",
+            ];
+            if (POPULAR_METROS.includes(area) && !POPULAR_METROS.includes(city)) {
+              const temp = area;
+              area = city;
+              city = temp;
+            }
+
+            resolveCentersForLocation(state, city, area);
+          }
+        } catch (err) {
+          console.error("Location resolution error:", err);
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      () => setIsLocating(false),
+      { timeout: 8000 }
+    );
+  };
+
+  useEffect(() => {
+    // 1. Check if user configured a location in Quick Settings
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("kisanSetu_active_location");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed.state && parsed.city) {
+            resolveCentersForLocation(parsed.state, parsed.city, parsed.area);
+            return;
+          }
+        } catch {}
+      }
+    }
+
+    // 2. Otherwise auto-detect device location
+    detectDeviceLocation();
+
+    // 3. Listen to realtime location change from Quick Settings
+    const handleLocationChange = (e: any) => {
+      const loc = e.detail;
+      if (loc?.state && loc?.city) {
+        resolveCentersForLocation(loc.state, loc.city, loc.area);
+      }
+    };
+
+    window.addEventListener("kisanSetu_location_changed", handleLocationChange);
+    return () => window.removeEventListener("kisanSetu_location_changed", handleLocationChange);
+  }, []);
+
+  const filteredCenters = centers.filter((center) => {
     const matchesSearch =
       center.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       center.location.toLowerCase().includes(searchTerm.toLowerCase());
@@ -83,7 +377,7 @@ export default function ProcurementCenters({ onSelectCenter }: ProcurementCenter
     <section id="centers" className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-10">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
             {t("centers_title")}
           </h2>
@@ -91,6 +385,60 @@ export default function ProcurementCenters({ onSelectCenter }: ProcurementCenter
           <p className="text-lg text-slate-600">
             {t("centers_desc")}
           </p>
+
+          {/* Location Bar with Direct Refresh & Fetch */}
+          <div className="mt-6 inline-flex flex-wrap items-center justify-center gap-3 bg-slate-900 text-white px-5 py-2.5 rounded-full shadow-lg border border-slate-800">
+            <div className="flex items-center gap-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-4 h-4 text-emerald-400 shrink-0"
+              >
+                <circle cx="12" cy="12" r="7" />
+                <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+                <line x1="12" y1="2" x2="12" y2="5" />
+                <line x1="12" y1="19" x2="12" y2="22" />
+                <line x1="2" y1="12" x2="5" y2="12" />
+                <line x1="19" y1="12" x2="22" y2="12" />
+              </svg>
+              <span className="font-extrabold text-sm sm:text-base text-white tracking-wide">
+                {displayLocation}
+              </span>
+            </div>
+
+            <div className="h-4 w-px bg-slate-700 hidden sm:block"></div>
+
+            <button
+              onClick={detectDeviceLocation}
+              disabled={isLocating}
+              className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 py-1.5 rounded-full transition-all duration-300 cursor-pointer shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50"
+              title="Detect live GPS location"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`w-3.5 h-3.5 ${isLocating ? "animate-spin" : ""}`}
+              >
+                <circle cx="12" cy="12" r="7" />
+                <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+                <line x1="12" y1="2" x2="12" y2="5" />
+                <line x1="12" y1="19" x2="12" y2="22" />
+                <line x1="2" y1="12" x2="5" y2="12" />
+                <line x1="19" y1="12" x2="22" y2="12" />
+              </svg>
+              <span>{isLocating ? "Locating..." : "Detect Live Location"}</span>
+            </button>
+          </div>
         </div>
 
         {/* Search & Filter Controls */}
@@ -129,18 +477,19 @@ export default function ProcurementCenters({ onSelectCenter }: ProcurementCenter
                 hi: "सभी",
                 or: "ସମସ୍ତ",
                 pa: "ਸਾਰੇ",
-                bn: "সব"
+                bn: "সব",
               };
-              const label = crop === "All" ? (filterAllLabels[lang] || "All") : t(`crop_${crop}`);
+              const label = crop === "All" ? filterAllLabels[lang] || "All" : t(`crop_${crop}`);
 
               return (
                 <button
                   key={crop}
                   onClick={() => setSelectedCrop(crop)}
-                  className={`px-4 py-2 rounded-full font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${selectedCrop === crop
+                  className={`px-4 py-2 rounded-full font-bold text-xs transition-all cursor-pointer whitespace-nowrap ${
+                    selectedCrop === crop
                       ? "bg-slate-900 text-white shadow-md"
                       : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
-                    }`}
+                  }`}
                 >
                   {label}
                 </button>
@@ -153,15 +502,12 @@ export default function ProcurementCenters({ onSelectCenter }: ProcurementCenter
         {filteredCenters.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {filteredCenters.map((center) => {
-              // Find the index in mock data to map it 1:1 to translation keys
-              const centerIdx = MOCK_CENTERS.findIndex((c) => c.id === center.id) + 1;
-              const localizedName = t(`center_${centerIdx}_name`);
-              const localizedLoc = t(`center_${centerIdx}_loc`);
+              const localizedName = center.name;
+              const localizedLoc = center.location;
 
-              // Helper to parse wait time minutes and append localized string
               const formatWaitTime = (rawWait: string) => {
                 const minutes = rawWait.replace(/\D/g, "");
-                return `${minutes} ${t("unit_mins_wait")}`;
+                return `${minutes} ${t("unit_mins_wait") || "mins wait"}`;
               };
 
               return (
@@ -222,25 +568,32 @@ export default function ProcurementCenters({ onSelectCenter }: ProcurementCenter
                       <div className="flex items-center justify-between text-xs font-semibold">
                         <span className="text-slate-500">{t("centers_space")}</span>
                         <span
-                          className={`font-bold ${center.status === "available"
+                          className={`font-bold ${
+                            center.status === "available"
                               ? "text-emerald-600"
                               : center.status === "busy"
-                                ? "text-amber-500"
-                                : "text-red-500"
-                            }`}
+                              ? "text-amber-500"
+                              : "text-red-500"
+                          }`}
                         >
-                          {center.capacity}% {center.status === "available" ? t("centers_available") : center.status === "busy" ? t("centers_busy") : t("centers_full")}
+                          {center.capacity}%{" "}
+                          {center.status === "available"
+                            ? t("centers_available")
+                            : center.status === "busy"
+                            ? t("centers_busy")
+                            : t("centers_full")}
                         </span>
                       </div>
 
                       <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-1000 ${center.status === "available"
+                          className={`h-full rounded-full transition-all duration-1000 ${
+                            center.status === "available"
                               ? "bg-emerald-500"
                               : center.status === "busy"
-                                ? "bg-amber-50"
-                                : "bg-red-500"
-                            }`}
+                              ? "bg-amber-400"
+                              : "bg-red-500"
+                          }`}
                           style={{ width: `${center.capacity}%` }}
                         ></div>
                       </div>

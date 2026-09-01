@@ -1,15 +1,10 @@
-"use client";
+import AdminDashboard from "@/components/AdminDashboard";
 
-import React from "react";
-import StaffPortal from "@/components/StaffPortal";
+export const metadata = {
+  title: "Admin Portal | KisanSetu Government Beneficiary Registry",
+  description: "Official National Government Portal for KisanSetu Farmer Beneficiary Registry & Direct Benefit Transfers.",
+};
 
 export default function AdminPage() {
-  return (
-    <StaffPortal
-      isOpen={true}
-      onClose={() => {}}
-      role="admin"
-      isFullScreen={true}
-    />
-  );
+  return <AdminDashboard />;
 }

@@ -1,11 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import QRCode from "qrcode";
 import { useTranslation } from "@/hooks/useTranslation";
 import { MOCK_CENTERS } from "./ProcurementCenters";
 
 interface ScheduleBookingProps {
-  preselectedCenter: string;
+  preselectedCenter?: string;
+  preselectedCrop?: string;
+  preselectedWeight?: number;
+  preselectedDate?: string;
+  preselectedSlot?: string;
+  preselectedStep?: number;
   onBookingSuccess: (bookingDetails: {
     center: string;
     crop: string;
@@ -24,7 +30,15 @@ const TIME_SLOTS = [
   { time: "04:00 PM - 06:00 PM", status: "Available", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
 ];
 
-export default function ScheduleBooking({ preselectedCenter, onBookingSuccess }: ScheduleBookingProps) {
+export default function ScheduleBooking({
+  preselectedCenter,
+  preselectedCrop,
+  preselectedWeight,
+  preselectedDate,
+  preselectedSlot,
+  preselectedStep,
+  onBookingSuccess,
+}: ScheduleBookingProps) {
   const [step, setStep] = useState(1);
   const [center, setCenter] = useState("");
   const [crop, setCrop] = useState("Paddy");
@@ -35,14 +49,21 @@ export default function ScheduleBooking({ preselectedCenter, onBookingSuccess }:
   
   // Receipt details
   const [receipt, setReceipt] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync preselected center from ProcurementCenters component selection
+  // Sync preselected parameters from URL/Chatbot
   useEffect(() => {
-    if (preselectedCenter) {
-      setCenter(preselectedCenter);
+    if (preselectedCenter) setCenter(preselectedCenter);
+    if (preselectedCrop) setCrop(preselectedCrop);
+    if (preselectedWeight && !isNaN(preselectedWeight)) setWeight(preselectedWeight);
+    if (preselectedDate) setSelectedDate(preselectedDate);
+    if (preselectedSlot) setSelectedSlot(preselectedSlot);
+    if (preselectedStep && preselectedStep >= 1 && preselectedStep <= 4) {
+      setStep(preselectedStep);
+    } else if (preselectedCenter) {
       setStep(1);
     }
-  }, [preselectedCenter]);
+  }, [preselectedCenter, preselectedCrop, preselectedWeight, preselectedDate, preselectedSlot, preselectedStep]);
 
   // Generate date options (Next 6 days starting today)
   const [dateOptions, setDateOptions] = useState<any[]>([]);
@@ -65,7 +86,7 @@ export default function ScheduleBooking({ preselectedCenter, onBookingSuccess }:
     setSelectedDate(days[0].id); // default to today
   }, []);
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     if (step === 1 && !center) {
       alert("Please select a procurement center first.");
       return;
@@ -78,22 +99,106 @@ export default function ScheduleBooking({ preselectedCenter, onBookingSuccess }:
       alert("Please choose an available time slot.");
       return;
     }
-    
+
     if (step < 3) {
       setStep(step + 1);
-    } else {
-      const randomToken = "KS-" + Math.floor(100000 + Math.random() * 900000);
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // Check for logged in farmer profile
+      let currentFarmerName = "Ramesh Kumar";
+      let currentFarmerPhone = "+91 98765 43210";
+      if (typeof window !== "undefined") {
+        const storedProfile = localStorage.getItem("farmer_profile") || localStorage.getItem("kisanSetu_farmer_profile");
+        if (storedProfile) {
+          try {
+            const parsed = JSON.parse(storedProfile);
+            if (parsed.name) currentFarmerName = parsed.name;
+            if (parsed.phone) currentFarmerPhone = parsed.phone;
+          } catch {}
+        }
+      }
+
+      const response = await fetch("/api/bookings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          farmerName: currentFarmerName,
+          centreName: center,
+          crop,
+          weight,
+          appointmentDate: selectedDate,
+          appointmentTime: selectedSlot,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to save booking.");
+      }
+
+      const generatedTokenId = result.booking.tokenId || `KS-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // Guarantee high-resolution dynamic one-time QR code
+      let qrCodeUrl = result.booking.qrCode;
+      if (!qrCodeUrl) {
+        const qrPayload = JSON.stringify({
+          tokenId: generatedTokenId,
+          farmerName: result.booking.farmerName || currentFarmerName,
+          phone: currentFarmerPhone,
+          center: result.booking.centreName || center,
+          crop: result.booking.crop || crop,
+          weight: result.booking.weight || weight,
+          date: result.booking.appointmentDate || selectedDate,
+          timeSlot: result.booking.appointmentTime || selectedSlot,
+          oneTimePass: true,
+          securityHash: `OTP_${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
+        });
+        qrCodeUrl = await QRCode.toDataURL(qrPayload, {
+          margin: 1,
+          width: 280,
+          errorCorrectionLevel: "H",
+          color: {
+            dark: "#022c22",
+            light: "#ffffff",
+          },
+        });
+      }
+
       const bookingData = {
-        center,
-        crop,
-        weight,
-        date: selectedDate,
-        timeSlot: selectedSlot,
-        tokenId: randomToken,
+        center: result.booking.centreName || center,
+        crop: result.booking.crop || crop,
+        weight: result.booking.weight || weight,
+        date: result.booking.appointmentDate || selectedDate,
+        timeSlot: result.booking.appointmentTime || selectedSlot,
+        tokenId: generatedTokenId,
+        qrCode: qrCodeUrl,
+        confirmationStatus: result.booking.confirmationStatus || "Confirmed",
+        farmerName: result.booking.farmerName || currentFarmerName,
+        farmerPhone: currentFarmerPhone,
+        qrToken: result.booking.qrToken,
       };
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("kisanSetu_latest_booking", JSON.stringify(bookingData));
+        window.dispatchEvent(new Event("kisanSetu_booking_created"));
+      }
+
       setReceipt(bookingData);
       setStep(4);
-      onBookingSuccess(bookingData);
+      if (onBookingSuccess) {
+        onBookingSuccess(bookingData);
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to process booking.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -108,6 +213,7 @@ export default function ScheduleBooking({ preselectedCenter, onBookingSuccess }:
     setWeight(30);
     setSelectedSlot("");
     setReceipt(null);
+    setIsSubmitting(false);
   };
 
   return (
@@ -341,98 +447,158 @@ export default function ScheduleBooking({ preselectedCenter, onBookingSuccess }:
             {step === 4 && receipt && (
               <div className="text-center py-4 space-y-6 animate-fade-in-up">
                 {/* Visual success alert */}
-                <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-2 text-emerald-600">
+                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-2 text-emerald-600 shadow-lg shadow-emerald-500/20 print:hidden">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
                     strokeWidth={3}
                     stroke="currentColor"
-                    className="w-7 h-7"
+                    className="w-8 h-8"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                   </svg>
                 </div>
                 
-                <h3 className="text-2xl font-black text-slate-900">{t("sched_success")}</h3>
-                <p className="text-slate-500 max-w-md mx-auto text-sm">
-                  {t("sched_success_desc")}
-                </p>
+                <div className="print:hidden">
+                  <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                    {t("sched_success") || "Appointment Confirmed!"}
+                  </h3>
+                  <p className="text-slate-500 max-w-md mx-auto text-xs sm:text-sm mt-1">
+                    Your dynamic one-time gate pass QR code has been generated. Please show this code at the APMC yard entry gate.
+                  </p>
+                </div>
 
-                {/* Digital Token Receipt Mockup */}
-                <div className="max-w-md mx-auto bg-slate-50 border border-slate-200/80 rounded-2xl p-6 text-left relative overflow-hidden shadow-inner">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-bl-full flex items-center justify-center font-bold text-emerald-800 text-xs">
-                    ACTIVE
+                {/* Official Confirmation Slip */}
+                <div className="max-w-2xl mx-auto bg-gradient-to-b from-white to-slate-50 border-2 border-emerald-500/30 rounded-3xl p-6 sm:p-8 text-left relative overflow-hidden shadow-2xl printable-slip-area print:border-2 print:border-black print:p-4 print:shadow-none print:bg-white print:text-black">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-bl-full flex items-start justify-end p-3 font-black text-emerald-800 text-[10px] uppercase tracking-wider">
+                    VALID PASS
                   </div>
 
-                  <div className="border-b border-dashed border-slate-300 pb-4 mb-4">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t("sched_ticket_token")}</span>
-                    <p className="text-2xl font-black text-emerald-600 tracking-wider mt-0.5">{receipt.tokenId}</p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
+                  {/* Top Slip Header */}
+                  <div className="flex items-center gap-3 pb-4 border-b-2 border-dashed border-slate-200">
+                    <img src="/icon.svg" alt="Logo" className="w-10 h-10 rounded-xl" />
                     <div>
-                      <span className="text-slate-400 block mb-0.5">{t("sched_ticket_center")}</span>
-                      <span className="text-slate-800 block text-sm font-bold leading-tight">
-                        {t(`center_${MOCK_CENTERS.findIndex(c => c.name === receipt.center) + 1}_name`)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block mb-0.5">{t("sched_ticket_crop")}</span>
-                      <span className="text-slate-800 block text-sm font-bold">
-                        🌾 {t("crop_" + receipt.crop)} ({receipt.weight} Qtl)
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block mb-0.5">{t("sched_ticket_date")}</span>
-                      <span className="text-slate-800 block text-sm font-bold">
-                        📅 {receipt.date}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block mb-0.5">{t("sched_ticket_slot")}</span>
-                      <span className="text-slate-800 block text-sm font-bold">
-                        ⏰ {receipt.timeSlot}
-                      </span>
+                      <h4 className="font-black text-slate-900 text-sm sm:text-base leading-tight">
+                        APMC GOVT PROCUREMENT YARD • GATE ENTRY PASS
+                      </h4>
+                      <p className="text-[11px] text-slate-500 font-semibold">
+                        Ministry of Agriculture & Farmers Welfare • Direct Benefit Transfer (DBT)
+                      </p>
                     </div>
                   </div>
 
-                  {/* Mock QR Code Visual */}
-                  <div className="mt-6 pt-5 border-t border-slate-200/60 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-bold uppercase">Status</span>
-                      <span className="text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-0.5 font-bold text-[10px] mt-1 inline-block">
-                        {t("sched_ticket_status")}
-                      </span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <div className="w-24 h-6 bg-slate-900 relative flex items-center justify-between px-1.5 py-1 rounded">
-                        <div className="h-full w-1 bg-white"></div>
-                        <div className="h-full w-0.5 bg-white"></div>
-                        <div className="h-full w-2 bg-white"></div>
-                        <div className="h-full w-0.5 bg-white"></div>
-                        <div className="h-full w-1 bg-white"></div>
-                        <div className="h-full w-1.5 bg-white"></div>
-                        <div className="h-full w-0.5 bg-white"></div>
+                  {/* Top Section: Token ID, Time Window & Scannable QR Code */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3.5 border-b border-slate-100 print:border-slate-200">
+                    <div className="flex-1 space-y-2.5 w-full">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">ASSIGNED TOKEN ID</span>
+                          <p className="text-3xl sm:text-4xl font-black text-emerald-600 font-mono tracking-tight mt-0.5">{receipt.tokenId}</p>
+                        </div>
+                        <div>
+                          <span className="text-emerald-800 bg-emerald-100 border border-emerald-300 rounded-full px-3 py-1 font-extrabold text-xs inline-flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>ACTIVE PASS</span>
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-[9px] text-slate-400 font-mono mt-1">{t("sched_ticket_scan")}</span>
+
+                      <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-2.5 flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white font-bold flex items-center justify-center text-sm shadow-sm shrink-0">
+                          ⏰
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-black text-emerald-900 uppercase tracking-wider block">
+                            SCHEDULED ARRIVAL
+                          </span>
+                          <span className="text-xs sm:text-sm font-black text-slate-900 font-mono">
+                            {receipt.timeSlot} • <span className="font-bold text-slate-600">{receipt.date}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Top Scannable QR Code */}
+                    <div className="flex flex-col items-center shrink-0 bg-white p-2 sm:p-2.5 rounded-2xl border border-emerald-200 shadow-md">
+                      {receipt.qrCode ? (
+                        <img
+                          src={receipt.qrCode}
+                          alt="One-Time Pass QR Code"
+                          className="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-2xl border-2 border-emerald-300 p-1.5 shadow-sm"
+                        />
+                      ) : (
+                        <div className="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 border-2 border-dashed border-emerald-400 bg-white rounded-2xl flex items-center justify-center font-bold text-emerald-800 text-xs">
+                          QR Pass
+                        </div>
+                      )}
+                      <span className="text-[9px] sm:text-[10px] font-mono text-emerald-800 font-bold mt-1.5 tracking-wider uppercase">
+                        📷 SCAN AT APMC GATE
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-3 text-xs">
+                    <div className="bg-slate-100/60 p-2.5 rounded-xl">
+                      <span className="text-slate-400 block font-semibold text-[9px] uppercase">Farmer Beneficiary</span>
+                      <span className="text-slate-900 font-black text-xs sm:text-sm block mt-0.5">{receipt.farmerName}</span>
+                      <span className="text-slate-500 font-mono text-[10px]">{receipt.farmerPhone || "+91 98765 43210"}</span>
+                    </div>
+
+                    <div className="bg-slate-100/60 p-2.5 rounded-xl">
+                      <span className="text-slate-400 block font-semibold text-[9px] uppercase">Procurement Hub</span>
+                      <span className="text-slate-900 font-bold text-[11px] block mt-0.5 leading-snug">{receipt.center}</span>
+                    </div>
+
+                    <div className="bg-slate-100/60 p-2.5 rounded-xl">
+                      <span className="text-slate-400 block font-semibold text-[9px] uppercase">Commodity & Quantity</span>
+                      <span className="text-emerald-800 font-black text-xs block mt-0.5">
+                        🌾 {receipt.crop} — {receipt.weight} Quintals
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-100/60 p-2.5 rounded-xl">
+                      <span className="text-slate-400 block font-semibold text-[9px] uppercase">Official Status</span>
+                      <span className="text-slate-900 font-bold text-[11px] block mt-0.5">
+                        ✓ Verified Gate Entry Pass
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Receipt Actions */}
-                <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2 max-w-sm mx-auto">
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-4 max-w-xl mx-auto print:hidden">
+                  <a
+                    href={receipt.qrCode}
+                    download={`KisanSetu_GatePass_${receipt.tokenId}.png`}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs sm:text-sm px-6 py-3 rounded-full shadow-lg transition-all cursor-pointer flex items-center gap-2 hover:scale-105"
+                  >
+                    <span>📥</span>
+                    <span>Download QR Pass</span>
+                  </a>
+
                   <button
                     onClick={() => window.print()}
-                    className="flex-1 bg-slate-900 hover:bg-emerald-600 text-white font-bold text-sm px-6 py-3 rounded-full transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm px-6 py-3 rounded-full transition-all cursor-pointer flex items-center gap-2"
                   >
-                    🖨️ {t("sched_btn_print")}
+                    <span>🖨️</span>
+                    <span>Print Confirmation Slip</span>
                   </button>
+
+                  <a
+                    href={`/queue?token=${receipt.tokenId.replace(/\D/g, "")}&center=${encodeURIComponent(receipt.center)}`}
+                    className="bg-slate-100 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs sm:text-sm px-6 py-3 rounded-full transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <span>📍</span>
+                    <span>Track Live Yard Queue</span>
+                  </a>
+
                   <button
                     onClick={resetForm}
-                    className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm px-6 py-3 rounded-full shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    className="text-slate-500 hover:text-slate-900 font-bold text-xs px-4 py-2 cursor-pointer"
                   >
-                    🔄 {t("sched_btn_another")}
+                    🔄 Book Another Delivery
                   </button>
                 </div>
               </div>
@@ -456,19 +622,22 @@ export default function ScheduleBooking({ preselectedCenter, onBookingSuccess }:
 
               <button
                 onClick={handleNextStep}
-                className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm px-7 py-3 rounded-full shadow-md transition-all duration-300 cursor-pointer flex items-center gap-1"
+                disabled={isSubmitting}
+                className={`bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm px-7 py-3 rounded-full shadow-md transition-all duration-300 flex items-center gap-1 ${isSubmitting ? "opacity-70 cursor-not-allowed" : "cursor-pointer"}`}
               >
-                {step === 3 ? t("sched_btn_gen") : t("sched_btn_next")}
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2.5}
-                  stroke="currentColor"
-                  className="w-4 h-4"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                </svg>
+                {isSubmitting ? "Saving..." : step === 3 ? t("sched_btn_gen") : t("sched_btn_next")}
+                {!isSubmitting && (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2.5}
+                    stroke="currentColor"
+                    className="w-4 h-4"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                  </svg>
+                )}
               </button>
             </div>
           )}

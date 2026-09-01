@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     }
 
     const peopleAhead = bookingsAhead?.length ?? 0;
-    const currentlyProcessing = bookingsAhead?.some((item) => item.status === "processing");
+    const currentlyProcessing = bookingsAhead?.some((item: any) => item.status === "processing");
     const effectivePeopleAhead = currentlyProcessing ? Math.max(peopleAhead - 1, 0) : peopleAhead;
     const estimatedWaitMinutes = effectivePeopleAhead * centre.average_processing_minutes;
     const position = peopleAhead + 1;

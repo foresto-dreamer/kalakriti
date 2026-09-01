@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Navbar from "./Navbar";
 import Hero from "./Hero";
 import ProblemsCarousel from "./ProblemsCarousel";
@@ -23,6 +23,14 @@ export default function LandingPage() {
       setToastMessage("");
     }, 4000);
   };
+
+  useEffect(() => {
+    const handleOpenLogin = () => {
+      setLoginOpen(true);
+    };
+    window.addEventListener("kisansetu_open_login", handleOpenLogin);
+    return () => window.removeEventListener("kisansetu_open_login", handleOpenLogin);
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen bg-white w-full">
@@ -50,8 +58,15 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
             <div className="space-y-4">
-              <a href="/" className="text-2xl font-black tracking-tight block">
-                <span className="text-emerald-400">Kisan</span>Setu
+              <a href="/" className="flex items-center space-x-2.5">
+                <img
+                  src="/icon.svg"
+                  alt="KisanSetu Logo"
+                  className="w-8 h-8 rounded-xl shadow-md shadow-emerald-500/20"
+                />
+                <span className="text-2xl font-black tracking-tight block">
+                  <span className="text-emerald-400">Kisan</span>Setu
+                </span>
               </a>
               <p className="text-sm text-slate-400 leading-relaxed">
                 Empowering farmers with digitised scheduling, queue tracking, and direct mandi linkage. Built for transparent Indian agriculture.

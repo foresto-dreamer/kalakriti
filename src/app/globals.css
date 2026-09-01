@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #0f172a;
@@ -16,6 +21,46 @@
   --animate-float: float 6s ease-in-out infinite;
   --animate-pulse-slow: pulse-slow 3s ease-in-out infinite;
   --animate-fade-in-up: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-bounce-gentle: bounce-gentle 2.2s cubic-bezier(0.28, 0.84, 0.42, 1) infinite;
+  --animate-macos-open: macos-open 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-macos-close: macos-close 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+
+  @keyframes bounce-gentle {
+    0%, 100% {
+      transform: translateY(0) scale(1);
+    }
+    30% {
+      transform: translateY(-8px) scale(1.04);
+    }
+    50% {
+      transform: translateY(0) scale(0.98);
+    }
+    70% {
+      transform: translateY(-3px) scale(1.01);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes macos-close {
+    0% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      transform-origin: bottom right;
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.82) translateY(20px);
+      transform-origin: bottom right;
+    }
+  }
 
   @keyframes float {
     0%, 100% {
@@ -100,6 +145,52 @@ html {
 }
 .text-shadow-lg {
   text-shadow: 0 4px 16px rgba(0, 0, 0, 0.9);
+}
+
+/* Print optimization - hide navbar, chatbot, footer and ensure strict 1-page fit */
+@page {
+  size: portrait;
+  margin: 6mm;
+}
+
+@media print {
+  html, body {
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  header,
+  nav,
+  footer,
+  aside,
+  #kisan-chatbot,
+  .chatbot-container,
+  .no-print,
+  button:not(.print-keep),
+  a:not(.print-keep) {
+    display: none !important;
+  }
+
+  #printable-gate-pass,
+  .printable-slip-area {
+    margin: 0 auto !important;
+    padding: 1rem !important;
+    border: 2px solid #059669 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    page-break-inside: avoid !important;
+    page-break-after: avoid !important;
+    page-break-before: avoid !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
 }
 
 
